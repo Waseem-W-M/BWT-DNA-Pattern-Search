@@ -6,8 +6,8 @@ A Python implementation of the Burrows-Wheeler Transform (BWT), Inverse BWT (LF 
 Modern short-read aligners like Bowtie and BWA rely on the Burrows Wheeler Transform and FM Index to compress large reference genomes and align millions of sequencing reads in (m) time complexity (where m is the query pattern length), independent of the reference genome size.
 
  Features
-- BWT Construction & Suffix Array Mapping: Generates cyclic rotations, lexicographically sorts them, and extracts the BWT string alongside 0-based genomic coordinates.
-- Exact Sequence Reconstruction: Implements the Last-to-First (LF) mapping property to invert the BWT back to the original DNA sequence.
+- BWT Construction & Suffix Array Mapping: Generates cyclic rotations, lexicographically sorts them, and extracts the BWT string alongside based genomic coordinates.
+- Exact Sequence Reconstruction: Implements the Last to First (LF) mapping property to invert the BWT back to the original DNA sequence.
 - Fast Backward Search: Precomputes the C-table and cumulative occurrence cc matrix for m exact substring matching.
 - Double-Stranded DNA Support: Automatically queries both the input DNA motif and its reverse complement.
 
@@ -21,7 +21,7 @@ BWT-DNA-Pattern-Search/
  Getting Started
 
  Prerequisites
-- Python 3.8+ (uses standard library only; no external dependencies required).
+- Python 3.8+ (uses standard library only, no external dependencies required).
 
  Running the Project
 Clone the repository and run the script directly:
