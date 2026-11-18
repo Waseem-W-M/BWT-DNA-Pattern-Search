@@ -1,0 +1,185 @@
+"""
+Burrows-Wheeler Transform (BWT) and FM-Index Backward Search for DNA Sequences.
+Author: [Your Name]
+Description: Implements BWT construction, Inverse BWT (LF-Mapping), and exact 
+pattern matching for both forward and reverse-complement DNA strands.
+"""
+
+from typing import List, Tuple, Dict
+
+
+def clean_sequence(seq: str) -> str:
+    """Removes whitespace and converts DNA sequence to uppercase."""
+    return "".join(seq.split()).upper()
+
+
+def reverse_complement(dna_seq: str) -> str:
+    """Returns the reverse complement of a DNA sequence."""
+    complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N'}
+    return "".join(complement.get(base, base) for base in reversed(dna_seq))
+
+
+def build_bwt(text: str) -> Tuple[str, str, List[str], List[int]]:
+    """
+    Constructs the Burrows-Wheeler Transform (BWT) and Suffix Array from a reference sequence.
+    Appends '$' as the end-of-string sentinel if not already present.
+    """
+    if not text.endswith('$'):
+        text += '$'
+        
+    n = len(text)
+    # Create cyclic rotations along with their original starting indices (Suffix Array)
+    rotations_with_idx = [(text[i:] + text[:i], i) for i in range(n)]
+    
+    # Sort lexicographically by rotation string
+    rotations_with_idx.sort(key=lambda x: x[0])
+    
+    rotations = [item[0] for item in rotations_with_idx]
+    suffix_array = [item[1] for item in rotations_with_idx]
+    
+    last_column = "".join(row[-1] for row in rotations)
+    first_column = "".join(row[0] for row in rotations)
+    
+    return last_column, first_column, rotations, suffix_array
+
+
+def inverse_bwt(last_column: str) -> str:
+    """
+    Reconstructs the original DNA sequence from the BWT last column using LF-mapping.
+    """
+    n = len(last_column)
+    first_column = "".join(sorted(last_column))
+    
+    # Compute rank (1-based occurrence count) of each character in L
+    counts: Dict[str, int] = {}
+    rank: List[int] = []
+    for char in last_column:
+        counts[char] = counts.get(char, 0) + 1
+        rank.append(counts[char])
+        
+    # Starting index of each character in F
+    first_occ: Dict[str, int] = {}
+    total = 0
+    for char in sorted(set(first_column)):
+        first_occ[char] = total
+        total += first_column.count(char)
+        
+    # Trace back from '$' at row 0
+    row = 0
+    reconstructed = []
+    for _ in range(n):
+        char = last_column[row]
+        reconstructed.append(char)
+        row = first_occ[char] + rank[row] - 1
+        
+    # Reverse the traced characters and strip the trailing '$'
+    original_with_sentinel = "".join(reversed(reconstructed))
+    return original_with_sentinel[:-1] if original_with_sentinel.endswith('$') else original_with_sentinel
+
+
+def build_fm_index(last_column: str) -> Tuple[Dict[str, int], Dict[str, List[int]]]:
+    """
+    Precomputes the C-table (first_occ) and Occ-table (cumulative character counts)
+    required for O(m) Backward Search.
+    """
+    alphabet = sorted(set(last_column))
+    first_column = "".join(sorted(last_column))
+    
+    first_occ: Dict[str, int] = {}
+    total = 0
+    for char in alphabet:
+        first_occ[char] = total
+        total += first_column.count(char)
+        
+    occ_table: Dict[str, List[int]] = {char: [0] * (len(last_column) + 1) for char in alphabet}
+    for i, char in enumerate(last_column):
+        for ch in alphabet:
+            occ_table[ch][i + 1] = occ_table[ch][i]
+        occ_table[char][i + 1] += 1
+        
+    return first_occ, occ_table
+
+
+def backward_search(
+    last_column: str,
+    pattern: str,
+    first_occ: Dict[str, int],
+    occ_table: Dict[str, List[int]],
+    suffix_array: List[int]
+) -> Tuple[int, List[int]]:
+    """
+    Performs FM-Index Backward Search for an exact pattern match.
+    Returns the total occurrence count and the 0-based genomic positions.
+    """
+    if not pattern:
+        return 0, []
+        
+    top = 0
+    bottom = len(last_column) - 1
+    i = len(pattern) - 1
+    
+    while top <= bottom and i >= 0:
+        char = pattern[i]
+        if char not in first_occ:
+            return 0, []
+            
+        top = first_occ[char] + occ_table[char][top]
+        bottom = first_occ[char] + occ_table[char][bottom + 1] - 1
+        i -= 1
+        
+    if top > bottom:
+        return 0, []
+        
+    count = bottom - top + 1
+    positions = sorted(suffix_array[top : bottom + 1])
+    return count, positions
+
+
+def run_demo():
+    print("=" * 65)
+    print(" BWT & FM-Index Backward Search for DNA Pattern Matching ")
+    print("=" * 65)
+    
+    # Sample viral/plasmid reference fragment
+    raw_reference = """
+    ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGAC
+    GGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTAC
+    """
+    reference = clean_sequence(raw_reference)
+    print(f"\n[1] Reference Sequence (Length: {len(reference)} bp):")
+    print(f"    {reference[:60]}...")
+    
+    # Step 1: Build BWT and Suffix Array
+    bwt_L, bwt_F, _, suffix_array = build_bwt(reference)
+    print(f"\n[2] BWT Last Column (first 60 chars):")
+    print(f"    {bwt_L[:60]}...")
+    
+    # Step 2: Validate Inverse BWT
+    reconstructed = inverse_bwt(bwt_L)
+    assert reconstructed == reference, "Error: Reconstructed sequence does not match original!"
+    print(f"\n[3] Inverse BWT Check: PASSED (100% identical to original sequence)")
+    
+    # Step 3: Build FM-Index tables
+    first_occ, occ_table = build_fm_index(bwt_L)
+    
+    # Step 4: Search patterns and their Reverse Complements
+    patterns = ["GGCGAG", "TTCAGC", "ATGCCA"]
+    print("\n[4] Pattern Search Results (Forward & Reverse Complement):")
+    print("-" * 65)
+    print(f"{'Query':<10} | {'Strand':<8} | {'Seq':<10} | {'Count':<6} | {'0-Based Positions'}")
+    print("-" * 65)
+    
+    for pat in patterns:
+        # Forward strand search
+        fwd_count, fwd_pos = backward_search(bwt_L, pat, first_occ, occ_table, suffix_array)
+        print(f"{pat:<10} | {'Forward':<8} | {pat:<10} | {fwd_count:<6} | {fwd_pos}")
+        
+        # Reverse complement search
+        rc_pat = reverse_complement(pat)
+        rc_count, rc_pos = backward_search(bwt_L, rc_pat, first_occ, occ_table, suffix_array)
+        print(f"{pat:<10} | {'RevComp':<8} | {rc_pat:<10} | {rc_count:<6} | {rc_pos}")
+        print("-" * 65)
+
+
+if __name__ == "__main__":
+    run_demo()
